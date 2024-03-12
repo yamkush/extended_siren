@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import os
+from pathlib import Path
 
 from PIL import Image
 from torchvision.transforms import Resize, Compose, ToTensor, Normalize
@@ -21,6 +22,12 @@ def get_mgrid(sidelen, dim=2):
     mgrid = mgrid.reshape(-1, dim)
     return mgrid
 
+def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
+    tensors =tuple([torch.linspace(-1,1,steps=num_of_images)*2]) + tuple(dim * [torch.linspace(-1, 1, steps=sidelen)]) 
+    mgrid = torch.stack(torch.meshgrid(*tensors), dim=-1)
+    mgrid = mgrid.reshape(-1, dim+1)
+    mgrid = mgrid[:,[1,2,0]]
+    return mgrid
 
 
 class SineLayer(nn.Module):
@@ -154,11 +161,16 @@ def get_image_tensor(image_path):
 
 
 class ImageFitting(Dataset):
-    def __init__(self, sidelength, image_path:str):
+    def __init__(self, sidelength, images_dir:str):
         super().__init__()
-        img = get_image_tensor( image_path)
-        self.pixels = img.permute(1, 2, 0).view(-1, 3)
-        self.coords = get_mgrid(sidelength, 2)
+
+        img1 = get_image_tensor( Path(images_dir)/ 'buy-48.png')
+        img2 = get_image_tensor(Path(images_dir)/ 'return_purchase-48.png')
+        num_of_images = 2
+        pixels1 = img1.permute(1, 2, 0).view(-1, 3)
+        pixels2 = img2.permute(1, 2, 0).view(-1, 3)
+        self.pixels = torch.row_stack([pixels1, pixels2])
+        self.coords = get_extanded_mgrid(sidelength, 2, num_of_images)
 
     def __len__(self):
         return 1
@@ -171,12 +183,12 @@ class ImageFitting(Dataset):
 
 
 if __name__ == '__main__':
-    image_path = '/home/yam/workspace/data/cognetive/data/48/archeology-48.png'
+    images_dir = '/home/yam/workspace/data/cognetive/data/48_test'
     sidelen = 48
-    cameraman = ImageFitting(48, image_path)
-    dataloader = DataLoader(cameraman, batch_size=1, pin_memory=True, num_workers=0)
+    image_dataset = ImageFitting(48, images_dir)
+    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
 
-    img_siren = Siren(in_features=2, out_features=3, hidden_features=256,
+    img_siren = Siren(in_features=3, out_features=3, hidden_features=256,
                     hidden_layers=3, outermost_linear=True)
     img_siren.cuda()
 
@@ -197,9 +209,9 @@ if __name__ == '__main__':
             # img_grad = gradient(model_output, coords)
             # img_laplacian = laplace(model_output, coords)
 
-            fig, axes = plt.subplots(1,1, figsize=(18,6))
-            axes.imshow(model_output.cpu().view(sidelen,sidelen,3).detach().numpy())
-
+            fig, axes = plt.subplots(1,2, figsize=(18,6))
+            axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
             plt.show()
 
         optim.zero_grad()
