@@ -141,22 +141,23 @@ def gradient(y, x, grad_outputs=None):
     grad = torch.autograd.grad(y, [x], grad_outputs=grad_outputs, create_graph=True)[0]
     return grad
 
-def get_cameraman_tensor(sidelength):
-    img = Image.fromarray(skimage.data.camera())
+def get_image_tensor(image_path):
+    img = Image.open(image_path)
+    
+    img2 = Image.fromarray(skimage.data.camera())
     transform = Compose([
-        Resize(sidelength),
         ToTensor(),
         Normalize(torch.Tensor([0.5]), torch.Tensor([0.5]))
     ])
-    img = transform(img)
+    img = transform(img)[:3]
     return img
 
 
 class ImageFitting(Dataset):
-    def __init__(self, sidelength):
+    def __init__(self, sidelength, image_path:str):
         super().__init__()
-        img = get_cameraman_tensor(sidelength)
-        self.pixels = img.permute(1, 2, 0).view(-1, 1)
+        img = get_image_tensor( image_path)
+        self.pixels = img.permute(1, 2, 0).view(-1, 3)
         self.coords = get_mgrid(sidelength, 2)
 
     def __len__(self):
@@ -170,10 +171,12 @@ class ImageFitting(Dataset):
 
 
 if __name__ == '__main__':
-    cameraman = ImageFitting(256)
+    image_path = '/home/yam/workspace/data/cognetive/data/48/archeology-48.png'
+    sidelen = 48
+    cameraman = ImageFitting(48, image_path)
     dataloader = DataLoader(cameraman, batch_size=1, pin_memory=True, num_workers=0)
 
-    img_siren = Siren(in_features=2, out_features=1, hidden_features=256,
+    img_siren = Siren(in_features=2, out_features=3, hidden_features=256,
                     hidden_layers=3, outermost_linear=True)
     img_siren.cuda()
 
@@ -195,7 +198,7 @@ if __name__ == '__main__':
             # img_laplacian = laplace(model_output, coords)
 
             fig, axes = plt.subplots(1,1, figsize=(18,6))
-            axes.imshow(model_output.cpu().view(256,256).detach().numpy())
+            axes.imshow(model_output.cpu().view(sidelen,sidelen,3).detach().numpy())
 
             plt.show()
 
