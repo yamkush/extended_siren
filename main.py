@@ -10,6 +10,7 @@ from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 import numpy as np
 import skimage
 import matplotlib.pyplot as plt
+import glob
 
 import time
 
@@ -163,13 +164,14 @@ def get_image_tensor(image_path):
 class ImageFitting(Dataset):
     def __init__(self, sidelength, images_dir:str):
         super().__init__()
-
-        img1 = get_image_tensor( Path(images_dir)/ 'buy-48.png')
-        img2 = get_image_tensor(Path(images_dir)/ 'return_purchase-48.png')
-        num_of_images = 2
-        pixels1 = img1.permute(1, 2, 0).view(-1, 3)
-        pixels2 = img2.permute(1, 2, 0).view(-1, 3)
-        self.pixels = torch.row_stack([pixels1, pixels2])
+        images_path_list = list(glob.glob(str(Path(images_dir)/ '*.png')))
+        num_of_images = len(images_path_list)
+        pixels_list = []
+        for image_path in glob.glob(str(Path(images_dir)/ '*.png')):
+            img_i = get_image_tensor(image_path)
+            pixels_i = img_i.permute(1, 2, 0).view(-1, 3)
+            pixels_list.append(pixels_i)
+        self.pixels = torch.row_stack(pixels_list)
         self.coords = get_extanded_mgrid(sidelength, 2, num_of_images)
 
     def __len__(self):
