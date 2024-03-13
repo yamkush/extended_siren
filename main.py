@@ -24,11 +24,15 @@ def get_mgrid(sidelen, dim=2):
     return mgrid
 
 def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
-    tensors =tuple([torch.linspace(-1,1,steps=num_of_images)*2]) + tuple(dim * [torch.linspace(-1, 1, steps=sidelen)]) 
+    tensors =tuple([torch.linspace(-1,1,steps=num_of_images)*2]) + tuple(dim * [torch.linspace(-0.5, 0.5, steps=sidelen)]) 
     mgrid = torch.stack(torch.meshgrid(*tensors), dim=-1)
     mgrid = mgrid.reshape(-1, dim+1)
     mgrid = mgrid[:,[1,2,0]]
     return mgrid
+
+# def get_zifran_mgrid(sidelen, dim=2, num_of_images):
+#     mgrid = get_mgrid(sidelen)
+#     torch.
 
 
 class SineLayer(nn.Module):
@@ -70,8 +74,27 @@ class SineLayer(nn.Module):
         return torch.sin(intermediate), intermediate
 
 
+class StepLayer(nn.Module):
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__()
+        self.sigmoid = nn.Sigmoid()
+        self.in_features = in_features
+        self.linear = nn.Linear(in_features, out_features, bias=bias)
+
+        self.init_weights()
+
+
+    def init_weights(self):
+        with torch.no_grad():
+            self.linear.weight.uniform_(-np.sqrt(6 / self.in_features) / 30,
+                                             np.sqrt(6 / self.in_features) / 30)
+
+    def forward(self, input):
+        return self.sigmoid(self.linear(input) - self.linear.bias)*self.linear.bias
+
+
 class Siren(nn.Module):
-    def __init__(self, in_features, hidden_features, hidden_layers, out_features, outermost_linear=False,
+    def __init__(self, in_features, hidden_features, hidden_layers, out_features, outermost='linear',
                  first_omega_0=30, hidden_omega_0=30.):
         super().__init__()
 
@@ -83,7 +106,7 @@ class Siren(nn.Module):
             self.net.append(SineLayer(hidden_features, hidden_features,
                                       is_first=False, omega_0=hidden_omega_0))
 
-        if outermost_linear:
+        if outermost=='linear':
             final_linear = nn.Linear(hidden_features, out_features)
 
             with torch.no_grad():
@@ -91,6 +114,9 @@ class Siren(nn.Module):
                                               np.sqrt(6 / hidden_features) / hidden_omega_0)
 
             self.net.append(final_linear)
+
+        elif outermost=='step_layer':
+            self.net.append(StepLayer(hidden_features,out_features, bias=True))
         else:
             self.net.append(SineLayer(hidden_features, out_features,
                                       is_first=False, omega_0=hidden_omega_0))
@@ -191,7 +217,7 @@ if __name__ == '__main__':
     dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
 
     img_siren = Siren(in_features=3, out_features=3, hidden_features=256,
-                    hidden_layers=3, outermost_linear=True)
+                    hidden_layers=6, outermost='linear')
     img_siren.cuda()
 
     total_steps = 500 # Since the whole image is our dataset, this just means 500 gradient descent steps.
