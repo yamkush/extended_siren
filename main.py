@@ -165,14 +165,14 @@ class ImageFitting(Dataset):
     def __init__(self, sidelength, images_dir:str):
         super().__init__()
         images_path_list = list(glob.glob(str(Path(images_dir)/ '*.png')))
-        num_of_images = len(images_path_list)
+        self.num_of_images = len(images_path_list)
         pixels_list = []
         for image_path in glob.glob(str(Path(images_dir)/ '*.png')):
             img_i = get_image_tensor(image_path)
             pixels_i = img_i.permute(1, 2, 0).view(-1, 3)
             pixels_list.append(pixels_i)
         self.pixels = torch.row_stack(pixels_list)
-        self.coords = get_extanded_mgrid(sidelength, 2, num_of_images)
+        self.coords = get_extanded_mgrid(sidelength, 2, self.num_of_images)
 
     def __len__(self):
         return 1
@@ -185,7 +185,7 @@ class ImageFitting(Dataset):
 
 
 if __name__ == '__main__':
-    images_dir = '/home/yam/workspace/data/cognetive/data/48_test'
+    images_dir = '/home/yam/workspace/data/cognetive/data/48'
     sidelen = 48
     image_dataset = ImageFitting(48, images_dir)
     dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
@@ -202,6 +202,8 @@ if __name__ == '__main__':
     model_input, ground_truth = next(iter(dataloader))
     model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
 
+    losses_agragated = []
+
     for step in range(total_steps):
         model_output, coords = img_siren(model_input)
         loss = ((model_output - ground_truth)**2).mean()
@@ -215,8 +217,27 @@ if __name__ == '__main__':
             axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
             axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
             plt.show()
+            # model_output, coords = img_siren(model_input)
+            pixels_in_image = sidelen**2
+            losses = []
+            for i in range(image_dataset.num_of_images):
+                losses.append(((model_output[0,pixels_in_image*(i):pixels_in_image*(i+1)] - ground_truth[0,pixels_in_image*(i):pixels_in_image*(i+1)])**2).mean())
+            losses = torch.tensor(losses)
+            losses_agragated.append(losses)
+
 
         optim.zero_grad()
         loss.backward()
         optim.step()
+
+    model_output, coords = img_siren(model_input)
+    pixels_in_image = sidelen**2
+    losses = []
+
+    for lossest in losses_agragated:
+        plt.plot(torch.log(lossest))
+    plt.show()
+    plt.plot(losses_agragated[-1])
+    plt.show()
+
     print('baby')
