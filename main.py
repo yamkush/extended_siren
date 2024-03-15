@@ -208,20 +208,27 @@ class ImageFitting(Dataset):
 
         return self.coords, self.pixels
 
+class TrainConfig:
+    def __init__(self, total_steps:int, steps_til_summary:int , lr:float):
+        self.total_steps = total_steps
+        self.steps_til_summary = steps_til_summary
+        self.lr = lr
+
+def loss_per_image(sidelen: int, num_of_images: int, pred: torch.Tensor, gt:torch.Tensor) -> list:
+    pixels_in_image = sidelen**2
+    losses = []
+    for i in range(image_dataset.num_of_images):
+        losses.append(((pred[0,pixels_in_image*(i):pixels_in_image*(i+1)] - gt[0,pixels_in_image*(i):pixels_in_image*(i+1)])**2).mean())
+    return losses
 
 
-if __name__ == '__main__':
-    images_dir = '/home/yam/workspace/data/cognetive/data/48'
-    sidelen = 48
-    image_dataset = ImageFitting(48, images_dir)
-    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
+def train(siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
 
-    img_siren = Siren(in_features=3, out_features=3, hidden_features=256,
-                    hidden_layers=6, outermost='linear')
     img_siren.cuda()
 
-    total_steps = 500 # Since the whole image is our dataset, this just means 500 gradient descent steps.
-    steps_til_summary = 249
+    total_steps = config.total_steps # Since the whole image is our dataset, this just means 500 gradient descent steps.
+    steps_til_summary = config.steps_til_summary
+    lr = config.lr
 
     optim = torch.optim.Adam(lr=1e-4, params=img_siren.parameters())
 
@@ -239,15 +246,12 @@ if __name__ == '__main__':
             # img_grad = gradient(model_output, coords)
             # img_laplacian = laplace(model_output, coords)
 
-            fig, axes = plt.subplots(1,2, figsize=(18,6))
-            axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            plt.show()
+            # fig, axes = plt.subplots(1,2, figsize=(18,6))
+            # axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            # axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            # plt.show()
             # model_output, coords = img_siren(model_input)
-            pixels_in_image = sidelen**2
-            losses = []
-            for i in range(image_dataset.num_of_images):
-                losses.append(((model_output[0,pixels_in_image*(i):pixels_in_image*(i+1)] - ground_truth[0,pixels_in_image*(i):pixels_in_image*(i+1)])**2).mean())
+            losses = loss_per_image(sidelen, dataloader.dataset.num_of_images, model_output, ground_truth)
             losses = torch.tensor(losses)
             losses_agragated.append(losses)
 
@@ -256,14 +260,41 @@ if __name__ == '__main__':
         loss.backward()
         optim.step()
 
-    model_output, coords = img_siren(model_input)
-    pixels_in_image = sidelen**2
-    losses = []
+    return {'losses_vector': losses_agragated}
 
-    for lossest in losses_agragated:
-        plt.plot(torch.log(lossest))
+def visualize_network_convergence(train_summery:dict):
+        # plt.figure(0)
+    # for lossest in losses_agragated:
+    #     plt.plot(torch.log(lossest))
+    
+    losses_agragated = torch.stack(train_summery['losses_vector'])
+
+    fig, ax =plt.subplots(figsize=(6, 6))
+
+    ax.plot(torch.log(losses_agragated.mean(dim=1)), label='mean')
+    ax.plot(torch.log(losses_agragated.max(dim=1)[0]), label='min')
+    ax.legend()
+    plt.title('images generalization')
     plt.show()
-    plt.plot(losses_agragated[-1])
-    plt.show()
+
+if __name__ == '__main__':
+    # configuration 
+    images_dir = '/home/yam/workspace/data/cognetive/data/48_test_bigger'
+    hidden_features = 256
+    hidden_layers = 6
+    train_config = TrainConfig(total_steps = 500, steps_til_summary=10, lr = 1e-4)
+    sidelen = 48
+
+    # data loading and traning
+    image_dataset = ImageFitting(48, images_dir)
+    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
+    img_siren = Siren(in_features=image_dataset.coords.shape[1], out_features=image_dataset.pixels.shape[1], hidden_features=hidden_features,
+                    hidden_layers=hidden_layers, outermost='linear')
+    train_summery = train(img_siren, dataloader, train_config)
+    # show resoults 
+    model_input, ground_truth = next(iter(dataloader))
+    model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
+
+    visualize_network_convergence(train_summery)
 
     print('baby')
