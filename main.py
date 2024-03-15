@@ -190,10 +190,10 @@ def get_image_tensor(image_path):
 class ImageFitting(Dataset):
     def __init__(self, sidelength, images_dir:str):
         super().__init__()
-        images_path_list = list(glob.glob(str(Path(images_dir)/ '*.png')))
+        images_path_list = sorted(glob.glob(str(Path(images_dir)/ '*.png')))
         self.num_of_images = len(images_path_list)
         pixels_list = []
-        for image_path in glob.glob(str(Path(images_dir)/ '*.png')):
+        for image_path in images_path_list:
             img_i = get_image_tensor(image_path)
             pixels_i = img_i.permute(1, 2, 0).view(-1, 3)
             pixels_list.append(pixels_i)
@@ -246,10 +246,10 @@ def train(siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
             # img_grad = gradient(model_output, coords)
             # img_laplacian = laplace(model_output, coords)
 
-            # fig, axes = plt.subplots(1,2, figsize=(18,6))
-            # axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            # axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            # plt.show()
+            fig, axes = plt.subplots(1,2, figsize=(18,6))
+            axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            plt.show()
             # model_output, coords = img_siren(model_input)
             losses = loss_per_image(sidelen, dataloader.dataset.num_of_images, model_output, ground_truth)
             losses = torch.tensor(losses)
@@ -268,22 +268,41 @@ def visualize_network_convergence(train_summery:dict):
     #     plt.plot(torch.log(lossest))
     
     losses_agragated = torch.stack(train_summery['losses_vector'])
-
+    upsample_losses = torch.stack(train_summery['upsample_losses']).mean()
     fig, ax =plt.subplots(figsize=(6, 6))
 
     ax.plot(torch.log(losses_agragated.mean(dim=1)), label='mean')
     ax.plot(torch.log(losses_agragated.max(dim=1)[0]), label='min')
+    ax.scatter(losses_agragated.shape[0]-1, torch.log(upsample_losses.detach().cpu()))
     ax.legend()
     plt.title('images generalization')
     plt.show()
 
+def check_image_upsample(images_dir:str, sidelen:int, img_siren:Siren):
+
+    # data loading and traning
+    image_dataset = ImageFitting(sidelen, images_dir)
+    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
+    model_input, ground_truth = next(iter(dataloader))
+    model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
+    model_output, coords = img_siren(model_input)
+    fig, axes = plt.subplots(1,2, figsize=(18,6))
+    axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+    axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+    plt.show()
+    losses = loss_per_image(sidelen, dataloader.dataset.num_of_images, model_output, ground_truth)
+    return losses
+
+
 if __name__ == '__main__':
     # configuration 
     images_dir = '/home/yam/workspace/data/cognetive/data/48_test_bigger'
+    high_res_images_dir = '/home/yam/workspace/data/cognetive/data/48_test_bigger'
     hidden_features = 256
-    hidden_layers = 6
-    train_config = TrainConfig(total_steps = 500, steps_til_summary=10, lr = 1e-4)
+    hidden_layers = 3
+    train_config = TrainConfig(total_steps = 500, steps_til_summary=249, lr = 1e-4)
     sidelen = 48
+    sidelen_highres = 48
 
     # data loading and traning
     image_dataset = ImageFitting(48, images_dir)
@@ -295,6 +314,9 @@ if __name__ == '__main__':
     model_input, ground_truth = next(iter(dataloader))
     model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
 
+
+    train_summery['upsample_losses'] = check_image_upsample(high_res_images_dir, sidelen_highres, img_siren)
     visualize_network_convergence(train_summery)
+
 
     print('baby')
