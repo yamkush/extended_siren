@@ -14,6 +14,9 @@ import glob
 
 import time
 
+from utils import vid_creator_compere_gt_to_pard, transrom_gt_and_pred_to_a_set_of_contatenated_images
+
+
 def get_mgrid(sidelen, dim=2):
     '''Generates a flattened grid of (x,y,...) coordinates in a range of -1 to 1.
     sidelen: int
@@ -246,10 +249,10 @@ def train(siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
             # img_grad = gradient(model_output, coords)
             # img_laplacian = laplace(model_output, coords)
 
-            fig, axes = plt.subplots(1,2, figsize=(18,6))
-            axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            plt.show()
+            # fig, axes = plt.subplots(1,2, figsize=(18,6))
+            # axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            # axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
+            # plt.show()
             # model_output, coords = img_siren(model_input)
             losses = loss_per_image(sidelen, dataloader.dataset.num_of_images, model_output, ground_truth)
             losses = torch.tensor(losses)
@@ -294,10 +297,38 @@ def check_image_upsample(images_dir:str, sidelen:int, img_siren:Siren):
     return losses
 
 
+def vid_creator(images):
+
+    image_files = sorted(os.listdir(image_dir))
+
+    # Define the output video file name
+    output_video = "output_video.avi"
+
+    # Get the first image to extract dimensions
+    first_image = cv2.imread(os.path.join(image_dir, image_files[0]))
+    height, width, _ = first_image.shape
+
+    # Define the video codec and create VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter(output_video, fourcc, 10.0, (width, height))
+
+    # Loop through each image and add it to the video
+    for image_file in image_files:
+        image_path = os.path.join(image_dir, image_file)
+        frame = cv2.imread(image_path)
+        out.write(frame)
+
+    # Release the VideoWriter and close all OpenCV windows
+    out.release()
+    cv2.destroyAllWindows()
+
 if __name__ == '__main__':
     # configuration 
-    images_dir = '/home/yam/workspace/data/cognetive/data/48_test_bigger'
-    high_res_images_dir = '/home/yam/workspace/data/cognetive/data/48_test_bigger'
+    main_dir = Path('/home/yam/workspace/data/cognetive/data/')
+    images_dir = main_dir / '48_test_bigger'
+    high_res_images_dir = main_dir/ '48_test_bigger'
+    output_vid_path = main_dir / 'gt_vs_pred.mp4'
+    
     hidden_features = 256
     hidden_layers = 3
     train_config = TrainConfig(total_steps = 500, steps_til_summary=249, lr = 1e-4)
@@ -313,10 +344,12 @@ if __name__ == '__main__':
     # show resoults 
     model_input, ground_truth = next(iter(dataloader))
     model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
-
-
+    model_output, coords = img_siren(model_input)
+    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(ground_truth, model_output,image_dataset.num_of_images, sidelen)
+    vid_creator_compere_gt_to_pard(images_tensor, output_vid_path)
     train_summery['upsample_losses'] = check_image_upsample(high_res_images_dir, sidelen_highres, img_siren)
     visualize_network_convergence(train_summery)
+    # interpulation(im1_idx, im2_idx, sidelen, img_siren)g
 
 
     print('baby')
