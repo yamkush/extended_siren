@@ -28,18 +28,21 @@ def get_mgrid(sidelen, dim=2, num_of_images=1):
     return mgrid
 
 def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
-    tensors =tuple([torch.linspace(-1,1,steps=num_of_images)*2]) + tuple(dim * [torch.linspace(-0.5, 0.5, steps=sidelen)]) 
+    tensors =tuple([torch.linspace(-1,1 -2/num_of_images,steps=num_of_images)]) + tuple(dim * [torch.linspace(-1, 1, steps=sidelen)]) 
     mgrid = torch.stack(torch.meshgrid(*tensors), dim=-1)
     mgrid = mgrid.reshape(-1, dim+1)
     mgrid = mgrid[:,[1,2,0]]
     return mgrid
 
 def get_zifran_mgrid(sidelen, dim=2, num_of_images=2):
+    R = 1
     mgrid = get_mgrid(sidelen, dim, num_of_images)
     mgrid2 = - torch.tensor([1, 1]) - mgrid
     mgrid3 = torch.stack((mgrid.norm(dim=1), mgrid[:,0]/ mgrid[:,1]),dim=1)
-    mgrid4 = get_extanded_mgrid(sidelen, dim, num_of_images)[:, -1][:,None]
-    mgrid5 = torch.cat((mgrid, mgrid2,mgrid3, mgrid4), dim=1)
+    mgrid_z = get_extanded_mgrid(sidelen, dim, num_of_images)[:, -1][:,None]
+    mgrid4 = R * torch.sin(mgrid_z*np.pi)
+    mgrid5 = R * torch.cos(mgrid_z*np.pi)
+    mgrid5 = torch.cat((mgrid, mgrid2,mgrid3, mgrid4, mgrid5), dim=1)
     
     return mgrid5
 
@@ -337,7 +340,7 @@ if __name__ == '__main__':
     
     hidden_features = 256
     hidden_layers = 3
-    train_config = TrainConfig(total_steps = 500, steps_til_summary=249, lr = 1e-4)
+    train_config = TrainConfig(total_steps = 1000, steps_til_summary=10, lr = 1e-4)
     sidelen = 48
     sidelen_highres = 48
 
