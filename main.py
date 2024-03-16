@@ -17,13 +17,14 @@ import time
 from utils import vid_creator_compere_gt_to_pard, transrom_gt_and_pred_to_a_set_of_contatenated_images
 
 
-def get_mgrid(sidelen, dim=2):
+def get_mgrid(sidelen, dim=2, num_of_images=1):
     '''Generates a flattened grid of (x,y,...) coordinates in a range of -1 to 1.
     sidelen: int
     dim: int'''
     tensors = tuple(dim * [torch.linspace(-1, 1, steps=sidelen)])
     mgrid = torch.stack(torch.meshgrid(*tensors), dim=-1)
     mgrid = mgrid.reshape(-1, dim)
+    mgrid = mgrid.repeat(num_of_images, 1)
     return mgrid
 
 def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
@@ -33,9 +34,14 @@ def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
     mgrid = mgrid[:,[1,2,0]]
     return mgrid
 
-# def get_zifran_mgrid(sidelen, dim=2, num_of_images):
-#     mgrid = get_mgrid(sidelen)
-#     torch.
+def get_zifran_mgrid(sidelen, dim=2, num_of_images=2):
+    mgrid = get_mgrid(sidelen, dim, num_of_images)
+    mgrid2 = - torch.tensor([1, 1]) - mgrid
+    mgrid3 = torch.stack((mgrid.norm(dim=1), mgrid[:,0]/ mgrid[:,1]),dim=1)
+    mgrid4 = get_extanded_mgrid(sidelen, dim, num_of_images)[:, -1][:,None]
+    mgrid5 = torch.cat((mgrid, mgrid2,mgrid3, mgrid4), dim=1)
+    
+    return mgrid5
 
 
 class SineLayer(nn.Module):
@@ -201,7 +207,7 @@ class ImageFitting(Dataset):
             pixels_i = img_i.permute(1, 2, 0).view(-1, 3)
             pixels_list.append(pixels_i)
         self.pixels = torch.row_stack(pixels_list)
-        self.coords = get_extanded_mgrid(sidelength, 2, self.num_of_images)
+        self.coords = get_zifran_mgrid(sidelength, 2, self.num_of_images)
 
     def __len__(self):
         return 1
