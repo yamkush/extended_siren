@@ -14,217 +14,16 @@ import glob
 
 import time
 
-from utils import vid_creator_compere_gt_to_pard, transrom_gt_and_pred_to_a_set_of_contatenated_images
+from utils import vid_creator_compere_gt_to_pard, transrom_gt_and_pred_to_a_set_of_contatenated_images, interpulation, check_image_upsample, visualize_network_convergence
+from siren import *
 
-
-def get_mgrid(sidelen, dim=2, num_of_images=1):
-    '''Generates a flattened grid of (x,y,...) coordinates in a range of -1 to 1.
-    sidelen: int
-    dim: int'''
-    tensors = tuple(dim * [torch.linspace(-1, 1, steps=sidelen)])
-    mgrid = torch.stack(torch.meshgrid(*tensors), dim=-1)
-    mgrid = mgrid.reshape(-1, dim)
-    mgrid = mgrid.repeat(num_of_images, 1)
-    return mgrid
-
-def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
-    tensors =tuple([torch.linspace(-1,1 -2/num_of_images,steps=num_of_images)]) + tuple(dim * [torch.linspace(-1, 1, steps=sidelen)]) 
-    mgrid = torch.stack(torch.meshgrid(*tensors), dim=-1)
-    mgrid = mgrid.reshape(-1, dim+1)
-    mgrid = mgrid[:,[1,2,0]]
-    return mgrid
-
-def get_zifran_mgrid(sidelen, dim=2, num_of_images=2):
-    R = 1
-    mgrid = get_mgrid(sidelen, dim, num_of_images)
-    mgrid2 = - torch.tensor([1, 1]) - mgrid
-    mgrid3 = torch.stack((mgrid.norm(dim=1), mgrid[:,0]/ mgrid[:,1]),dim=1)
-    mgrid_z = get_extanded_mgrid(sidelen, dim, num_of_images)[:, -1][:,None]
-    mgrid4 = R * torch.sin(mgrid_z*np.pi)
-    mgrid5 = R * torch.cos(mgrid_z*np.pi)
-    mgrid5 = torch.cat((mgrid, mgrid2,mgrid3, mgrid4, mgrid5), dim=1)
-    
-    return mgrid5
-
-
-class SineLayer(nn.Module):
-    # See paper sec. 3.2, final paragraph, and supplement Sec. 1.5 for discussion of omega_0.
-
-    # If is_first=True, omega_0 is a frequency factor which simply multiplies the activations before the
-    # nonlinearity. Different signals may require different omega_0 in the first layer - this is a
-    # hyperparameter.
-
-    # If is_first=False, then the weights will be divided by omega_0 so as to keep the magnitude of
-    # activations constant, but boost gradients to the weight matrix (see supplement Sec. 1.5)
-
-    def __init__(self, in_features, out_features, bias=True,
-                 is_first=False, omega_0=30):
-        super().__init__()
-        self.omega_0 = omega_0
-        self.is_first = is_first
-
-        self.in_features = in_features
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
-
-        self.init_weights()
-
-    def init_weights(self):
-        with torch.no_grad():
-            if self.is_first:
-                self.linear.weight.uniform_(-1 / self.in_features,
-                                             1 / self.in_features)
-            else:
-                self.linear.weight.uniform_(-np.sqrt(6 / self.in_features) / self.omega_0,
-                                             np.sqrt(6 / self.in_features) / self.omega_0)
-
-    def forward(self, input):
-        return torch.sin(self.omega_0 * self.linear(input))
-
-    def forward_with_intermediate(self, input):
-        # For visualization of activation distributions
-        intermediate = self.omega_0 * self.linear(input)
-        return torch.sin(intermediate), intermediate
-
-
-class StepLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True):
-        super().__init__()
-        self.sigmoid = nn.Sigmoid()
-        self.in_features = in_features
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
-
-        self.init_weights()
-
-
-    def init_weights(self):
-        with torch.no_grad():
-            self.linear.weight.uniform_(-np.sqrt(6 / self.in_features) / 30,
-                                             np.sqrt(6 / self.in_features) / 30)
-
-    def forward(self, input):
-        return self.sigmoid(self.linear(input) - self.linear.bias)*self.linear.bias
-
-
-class Siren(nn.Module):
-    def __init__(self, in_features, hidden_features, hidden_layers, out_features, outermost='linear',
-                 first_omega_0=30, hidden_omega_0=30.):
-        super().__init__()
-
-        self.net = []
-        self.net.append(SineLayer(in_features, hidden_features,
-                                  is_first=True, omega_0=first_omega_0))
-
-        for i in range(hidden_layers):
-            self.net.append(SineLayer(hidden_features, hidden_features,
-                                      is_first=False, omega_0=hidden_omega_0))
-
-        if outermost=='linear':
-            final_linear = nn.Linear(hidden_features, out_features)
-
-            with torch.no_grad():
-                final_linear.weight.uniform_(-np.sqrt(6 / hidden_features) / hidden_omega_0,
-                                              np.sqrt(6 / hidden_features) / hidden_omega_0)
-
-            self.net.append(final_linear)
-
-        elif outermost=='step_layer':
-            self.net.append(StepLayer(hidden_features,out_features, bias=True))
-        else:
-            self.net.append(SineLayer(hidden_features, out_features,
-                                      is_first=False, omega_0=hidden_omega_0))
-
-        self.net = nn.Sequential(*self.net)
-
-    def forward(self, coords):
-        coords = coords.clone().detach().requires_grad_(True) # allows to take derivative w.r.t. input
-        output = self.net(coords)
-        return output, coords
-
-    def forward_with_activations(self, coords, retain_grad=False):
-        '''Returns not only model output, but also intermediate activations.
-        Only used for visualizing activations later!'''
-        activations = OrderedDict()
-
-        activation_count = 0
-        x = coords.clone().detach().requires_grad_(True)
-        activations['input'] = x
-        for i, layer in enumerate(self.net):
-            if isinstance(layer, SineLayer):
-                x, intermed = layer.forward_with_intermediate(x)
-
-                if retain_grad:
-                    x.retain_grad()
-                    intermed.retain_grad()
-
-                activations['_'.join((str(layer.__class__), "%d" % activation_count))] = intermed
-                activation_count += 1
-            else:
-                x = layer(x)
-
-                if retain_grad:
-                    x.retain_grad()
-
-            activations['_'.join((str(layer.__class__), "%d" % activation_count))] = x
-            activation_count += 1
-
-        return activations
-
-def laplace(y, x):
-    grad = gradient(y, x)
-    return divergence(grad, x)
-
-
-def divergence(y, x):
-    div = 0.
-    for i in range(y.shape[-1]):
-        div += torch.autograd.grad(y[..., i], x, torch.ones_like(y[..., i]), create_graph=True)[0][..., i:i+1]
-    return div
-
-
-def gradient(y, x, grad_outputs=None):
-    if grad_outputs is None:
-        grad_outputs = torch.ones_like(y)
-    grad = torch.autograd.grad(y, [x], grad_outputs=grad_outputs, create_graph=True)[0]
-    return grad
-
-def get_image_tensor(image_path):
-    img = Image.open(image_path)
-    
-    img2 = Image.fromarray(skimage.data.camera())
-    transform = Compose([
-        ToTensor(),
-        Normalize(torch.Tensor([0.5]), torch.Tensor([0.5]))
-    ])
-    img = transform(img)[:3]
-    return img
-
-
-class ImageFitting(Dataset):
-    def __init__(self, sidelength, images_dir:str):
-        super().__init__()
-        images_path_list = sorted(glob.glob(str(Path(images_dir)/ '*.png')))
-        self.num_of_images = len(images_path_list)
-        pixels_list = []
-        for image_path in images_path_list:
-            img_i = get_image_tensor(image_path)
-            pixels_i = img_i.permute(1, 2, 0).view(-1, 3)
-            pixels_list.append(pixels_i)
-        self.pixels = torch.row_stack(pixels_list)
-        self.coords = get_zifran_mgrid(sidelength, 2, self.num_of_images)
-
-    def __len__(self):
-        return 1
-
-    def __getitem__(self, idx):
-        if idx > 0: raise IndexError
-
-        return self.coords, self.pixels
 
 class TrainConfig:
-    def __init__(self, total_steps:int, steps_til_summary:int , lr:float):
+    def __init__(self, total_steps:int, steps_til_summary:int , lr:float, omega_0:float):
         self.total_steps = total_steps
         self.steps_til_summary = steps_til_summary
         self.lr = lr
+        self.omega_0 = omega_0
 
 def loss_per_image(sidelen: int, num_of_images: int, pred: torch.Tensor, gt:torch.Tensor) -> list:
     pixels_in_image = sidelen**2
@@ -234,9 +33,8 @@ def loss_per_image(sidelen: int, num_of_images: int, pred: torch.Tensor, gt:torc
     return losses
 
 
-def train(siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
+def train(img_siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
 
-    img_siren.cuda()
 
     total_steps = config.total_steps # Since the whole image is our dataset, this just means 500 gradient descent steps.
     steps_til_summary = config.steps_til_summary
@@ -244,66 +42,27 @@ def train(siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
 
     optim = torch.optim.Adam(lr=1e-4, params=img_siren.parameters())
 
-    model_input, ground_truth = next(iter(dataloader))
-    model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
-
     losses_agragated = []
 
     for step in range(total_steps):
-        model_output, coords = img_siren(model_input)
-        loss = ((model_output - ground_truth)**2).mean()
-
-        if not step % steps_til_summary:
-            print("Step %d, Total loss %0.6f" % (step, loss))
-            # img_grad = gradient(model_output, coords)
-            # img_laplacian = laplace(model_output, coords)
-
-            # fig, axes = plt.subplots(1,2, figsize=(18,6))
-            # axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            # axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-            # plt.show()
-            # model_output, coords = img_siren(model_input)
-            losses = loss_per_image(sidelen, dataloader.dataset.num_of_images, model_output, ground_truth)
-            losses = torch.tensor(losses)
-            losses_agragated.append(losses)
-
-
-        optim.zero_grad()
-        loss.backward()
+        loss_no_grad = torch.scalar_tensor(0.).cuda()
+        losses_per_image = []
+        for model_input, ground_truth in dataloader:
+            model_input = model_input.cuda()
+            ground_truth = ground_truth.cuda()
+            model_output, coords = img_siren(model_input)
+            loss = ((model_output - ground_truth)**2).mean()
+            with torch.no_grad():
+                loss_no_grad += loss
+                losses_per_image.append(loss)
+            loss.backward()
         optim.step()
-
+        optim.zero_grad()
+        if not step % steps_til_summary:
+            print("Step %d, Total loss %0.6f" % (step, loss_no_grad))
+            losses_per_image = torch.tensor(losses_per_image)
+            losses_agragated.append(losses_per_image)
     return {'losses_vector': losses_agragated}
-
-def visualize_network_convergence(train_summery:dict):
-        # plt.figure(0)
-    # for lossest in losses_agragated:
-    #     plt.plot(torch.log(lossest))
-    
-    losses_agragated = torch.stack(train_summery['losses_vector'])
-    upsample_losses = torch.stack(train_summery['upsample_losses']).mean()
-    fig, ax =plt.subplots(figsize=(6, 6))
-
-    ax.plot(torch.log(losses_agragated.mean(dim=1)), label='mean')
-    ax.plot(torch.log(losses_agragated.max(dim=1)[0]), label='min')
-    ax.scatter(losses_agragated.shape[0]-1, torch.log(upsample_losses.detach().cpu()))
-    ax.legend()
-    plt.title('images generalization')
-    plt.show()
-
-def check_image_upsample(images_dir:str, sidelen:int, img_siren:Siren):
-
-    # data loading and traning
-    image_dataset = ImageFitting(sidelen, images_dir)
-    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
-    model_input, ground_truth = next(iter(dataloader))
-    model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
-    model_output, coords = img_siren(model_input)
-    fig, axes = plt.subplots(1,2, figsize=(18,6))
-    axes[0].imshow(model_output[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-    axes[1].imshow(ground_truth[0,:sidelen**2].cpu().view(sidelen,sidelen,3).detach().numpy())
-    plt.show()
-    losses = loss_per_image(sidelen, dataloader.dataset.num_of_images, model_output, ground_truth)
-    return losses
 
 
 def vid_creator(images):
@@ -334,31 +93,53 @@ def vid_creator(images):
 if __name__ == '__main__':
     # configuration 
     main_dir = Path('/home/yam/workspace/data/cognetive/data/')
-    images_dir = main_dir / '48_test_bigger'
-    high_res_images_dir = main_dir/ '48_test_bigger'
-    output_vid_path = main_dir / 'gt_vs_pred.mp4'
+
     
+
+    output_dir = main_dir / 'results'
+    output_dir.mkdir(exist_ok=True)
+    images_dir = main_dir / '48'
+    high_res_images_dir = main_dir/ '256'
+    output_vid_path = output_dir / 'gt_vs_pred.mp4'
+    output_vid_path_high_res =  output_dir / 'gt_vs_pred_high_res.mp4'
+    output_vid_path_interpulation =  output_dir / 'interpulation.mp4'
+    output_image_path_interpulation =  output_dir / 'interpulation.png'
+    convergene_graph =  output_dir / 'generalization.png'
+    images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
+    plot_output_path = output_dir / 'plot.png'
+    plot_output_path_high_res = output_dir / 'plot_high_res.png'
+
     hidden_features = 256
-    hidden_layers = 3
-    train_config = TrainConfig(total_steps = 1000, steps_til_summary=10, lr = 1e-4)
+    hidden_layers = 9
+    train_config = TrainConfig(total_steps = 1000, steps_til_summary=10, lr = 1e-4, omega_0=30)
     sidelen = 48
-    sidelen_highres = 48
+    sidelen_highres = 256
 
     # data loading and traning
     image_dataset = ImageFitting(48, images_dir)
-    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=True, num_workers=0)
-    img_siren = Siren(in_features=image_dataset.coords.shape[1], out_features=image_dataset.pixels.shape[1], hidden_features=hidden_features,
+    dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=False, num_workers=0)
+    img_siren = Siren(in_features=image_dataset.coords.shape[-1], out_features=image_dataset.pixels.shape[-1], hidden_features=hidden_features,
                     hidden_layers=hidden_layers, outermost='linear')
+    img_siren.cuda()
+    # train_summery['upsample_losses'] = check_image_upsample(high_res_images_dir, sidelen_highres, img_siren)
+
     train_summery = train(img_siren, dataloader, train_config)
     # show resoults 
-    model_input, ground_truth = next(iter(dataloader))
-    model_input, ground_truth = model_input.cuda(), ground_truth.cuda()
-    model_output, coords = img_siren(model_input)
-    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(ground_truth, model_output,image_dataset.num_of_images, sidelen)
+    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader, img_siren, sidelen)
+    ax  = plt.subplot(111)
+    ax.plot(images_tensor[0][:, 24, 0].detach().cpu())
+    ax.plot(images_tensor[0][:, 24+48, 0].detach().cpu())
+    plt.title('raw 24 in some image, the red channel')
+    plt.savefig(str(plot_output_path))
+    plt.show()
+    plt.imshow(images_tensor[0].detach().cpu())
+    plt.show()
+
     vid_creator_compere_gt_to_pard(images_tensor, output_vid_path)
-    train_summery['upsample_losses'] = check_image_upsample(high_res_images_dir, sidelen_highres, img_siren)
-    visualize_network_convergence(train_summery)
-    # interpulation(im1_idx, im2_idx, sidelen, img_siren)g
+    visualize_network_convergence(train_summery, convergene_graph, train_config)
+    check_image_upsample(high_res_images_dir, sidelen_highres, img_siren, output_vid_path_high_res, plot_output_path_high_res)
+    
+    interpulation(image_dataset, img_siren, images_pairs_names, images_dir, sidelen= sidelen, out_interp_vid_path = output_vid_path_interpulation, out_interp_img_path = output_image_path_interpulation)
+    
 
-
-    print('baby')
+    print('done!')
