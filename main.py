@@ -19,11 +19,11 @@ from siren import *
 
 
 class TrainConfig:
-    def __init__(self, total_steps:int, steps_til_summary:int , lr:float, omega_0:float):
+    def __init__(self, total_steps:int, steps_til_summary:int , lr:float, net_params: dict):
         self.total_steps = total_steps
         self.steps_til_summary = steps_til_summary
         self.lr = lr
-        self.omega_0 = omega_0
+        self.net_params = net_params
 
 def loss_per_image(sidelen: int, num_of_images: int, pred: torch.Tensor, gt:torch.Tensor) -> list:
     pixels_in_image = sidelen**2
@@ -90,36 +90,37 @@ def vid_creator(images):
     out.release()
     cv2.destroyAllWindows()
 
-if __name__ == '__main__':
+def run_exp(train_data_path, high_res_data_path, output_path, train_config):
     # configuration 
-    main_dir = Path('/home/yam/workspace/data/cognetive/data/')
-
-    
-
-    output_dir = main_dir / 'results'
-    output_dir.mkdir(exist_ok=True)
-    images_dir = main_dir / '48'
-    high_res_images_dir = main_dir/ '256'
-    output_vid_path = output_dir / 'gt_vs_pred.mp4'
-    output_vid_path_high_res =  output_dir / 'gt_vs_pred_high_res.mp4'
-    output_vid_path_interpulation =  output_dir / 'interpulation.mp4'
-    output_image_path_interpulation =  output_dir / 'interpulation.png'
-    convergene_graph =  output_dir / 'generalization.png'
+    # main_dir = Path('/home/yam/workspace/data/cognetive/data/')
+    # output_path = input_path / 'results'
+    output_path.mkdir(exist_ok=True)
+    # train_data_path = input_path / '48_test'
+    # high_res_train_data_path = input_path/ '256_test'
+    output_vid_path = output_path / 'gt_vs_pred.mp4'
+    output_vid_path_high_res =  output_path / 'gt_vs_pred_high_res.mp4'
+    output_vid_path_interpulation =  output_path / 'interpulation.mp4'
+    output_image_path_interpulation =  output_path / 'interpulation.png'
+    convergene_graph =  output_path / 'generalization.png'
     images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
-    plot_output_path = output_dir / 'plot.png'
-    plot_output_path_high_res = output_dir / 'plot_high_res.png'
+    plot_output_path = output_path / 'plot.png'
+    plot_output_path_high_res = output_path / 'plot_high_res.png'
 
-    hidden_features = 256
-    hidden_layers = 9
-    train_config = TrainConfig(total_steps = 1000, steps_til_summary=10, lr = 1e-4, omega_0=30)
+    hidden_features = train_config.net_params['hidden_features']
+    hidden_layers = train_config.net_params['hidden_layers']
+    omega_0 = train_config.net_params['omega_0']
+    outermost = train_config.net_params['outermost']
+    # net_architecture = {'hidden_features': hidden_features, 'hidden_layers': hidden_layers, 'omega_0': omega_0, 'outermost': 'linear'}
+    # train_config = TrainConfig(total_steps = 1000, steps_til_summary=10, lr = 1e-4, net_params=net_architecture)
+    hidden_features = train_config.net_params['hidden_features']
     sidelen = 48
     sidelen_highres = 256
 
     # data loading and traning
-    image_dataset = ImageFitting(48, images_dir)
+    image_dataset = ImageFitting(48, train_data_path)
     dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=False, num_workers=0)
     img_siren = Siren(in_features=image_dataset.coords.shape[-1], out_features=image_dataset.pixels.shape[-1], hidden_features=hidden_features,
-                    hidden_layers=hidden_layers, outermost='linear')
+                    hidden_layers=hidden_layers, outermost=outermost)
     img_siren.cuda()
     # train_summery['upsample_losses'] = check_image_upsample(high_res_images_dir, sidelen_highres, img_siren)
 
@@ -137,9 +138,28 @@ if __name__ == '__main__':
 
     vid_creator_compere_gt_to_pard(images_tensor, output_vid_path)
     visualize_network_convergence(train_summery, convergene_graph, train_config)
-    check_image_upsample(high_res_images_dir, sidelen_highres, img_siren, output_vid_path_high_res, plot_output_path_high_res)
+    check_image_upsample(high_res_data_path, sidelen_highres, img_siren, output_vid_path_high_res, plot_output_path_high_res)
     
-    interpulation(image_dataset, img_siren, images_pairs_names, images_dir, sidelen= sidelen, out_interp_vid_path = output_vid_path_interpulation, out_interp_img_path = output_image_path_interpulation)
+    interpulation(image_dataset, img_siren, images_pairs_names, train_data_path, sidelen= sidelen, out_interp_vid_path = output_vid_path_interpulation, out_interp_img_path = output_image_path_interpulation)
     
 
+
+
+if __name__ == '__main__':
+    data_dir = Path('/home/yam/workspace/data/cognetive/data/')
+    train_data_path = data_dir / '48_test'
+    high_res_data_path = data_dir/ '256_test'
+    output_path = data_dir / 'results'
+
+    hidden_features = 256
+    hidden_layers = 2
+    omega_0 = 30
+    outermost = 'linear'
+    total_steps = 60
+    steps_til_summary=10
+    lr = 1e-4
+
+    net_architecture = {'hidden_features': hidden_features, 'hidden_layers': hidden_layers, 'omega_0': omega_0, 'outermost': outermost}
+    train_config = TrainConfig(total_steps = total_steps, steps_til_summary=steps_til_summary, lr = lr, net_params=net_architecture)
+    run_exp(train_data_path, high_res_data_path, output_path, train_config)
     print('done!')
