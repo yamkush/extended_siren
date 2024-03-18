@@ -78,6 +78,9 @@ def interpulation(dataset, img_siren, images_pairs_names, images_dir, sidelen, o
             images_list.append(images_sub_list)
         
         horez_concat_images_list = []
+        if len(images_list) == 0:
+            return 
+            
         for image in images_list:
             horez_concat_images_list.append(torch.cat(image, dim=1))
 
@@ -109,15 +112,11 @@ def check_image_upsample(images_dir:str, sidelen:int, img_siren, output_path, pl
                 ax.plot(gt_im[:, 128, 0].detach().cpu(), label= 'gt')
                 plt.title('raw 128 in some image, the red channel')
                 plt.savefig(str(plot_output_path))
-                plt.show()
-                plt.imshow(gt_im.detach().cpu())
-                plt.show()
+                plt.close("all")
                 first_image_flag = False
 
-            
-            # plt.show()
             losses.append(((model_output - ground_truth.cuda())[0]**2).mean(dim=1).mean())
-    return losses
+    return torch.stack(losses)
 
 def visualize_network_convergence(train_summery:dict, output_path: Path, train_config):
 
@@ -131,4 +130,4 @@ def visualize_network_convergence(train_summery:dict, output_path: Path, train_c
     plt.xlabel('iteration')
     plt.ylabel('log error')
     plt.savefig(str(output_path))
-    plt.show()
+    plt.close("all")

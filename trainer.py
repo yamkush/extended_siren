@@ -65,30 +65,30 @@ def train(img_siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
     return {'losses_vector': losses_agragated}
 
 
-def vid_creator(images):
+# def vid_creator(images):
 
-    image_files = sorted(os.listdir(image_dir))
+#     image_files = sorted(os.listdir(image_dir))
 
-    # Define the output video file name
-    output_video = "output_video.avi"
+#     # Define the output video file name
+#     output_video = "output_video.avi"
 
-    # Get the first image to extract dimensions
-    first_image = cv2.imread(os.path.join(image_dir, image_files[0]))
-    height, width, _ = first_image.shape
+#     # Get the first image to extract dimensions
+#     first_image = cv2.imread(os.path.join(image_dir, image_files[0]))
+#     height, width, _ = first_image.shape
 
-    # Define the video codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output_video, fourcc, 10.0, (width, height))
+#     # Define the video codec and create VideoWriter object
+#     fourcc = cv2.VideoWriter_fourcc(*'XVID')
+#     out = cv2.VideoWriter(output_video, fourcc, 10.0, (width, height))
 
-    # Loop through each image and add it to the video
-    for image_file in image_files:
-        image_path = os.path.join(image_dir, image_file)
-        frame = cv2.imread(image_path)
-        out.write(frame)
+#     # Loop through each image and add it to the video
+#     for image_file in image_files:
+#         image_path = os.path.join(image_dir, image_file)
+#         frame = cv2.imread(image_path)
+#         out.write(frame)
 
-    # Release the VideoWriter and close all OpenCV windows
-    out.release()
-    cv2.destroyAllWindows()
+#     # Release the VideoWriter and close all OpenCV windows
+#     out.release()
+#     cv2.destroyAllWindows()
 
 def run_exp(train_data_path, high_res_data_path, output_path, train_config):
     # configuration 
@@ -132,16 +132,18 @@ def run_exp(train_data_path, high_res_data_path, output_path, train_config):
     ax.plot(images_tensor[0][:, 24+48, 0].detach().cpu())
     plt.title('raw 24 in some image, the red channel')
     plt.savefig(str(plot_output_path))
-    plt.show()
-    plt.imshow(images_tensor[0].detach().cpu())
-    plt.show()
+    plt.close("all")
 
     vid_creator_compere_gt_to_pard(images_tensor, output_vid_path)
     visualize_network_convergence(train_summery, convergene_graph, train_config)
-    check_image_upsample(high_res_data_path, sidelen_highres, img_siren, output_vid_path_high_res, plot_output_path_high_res)
+    high_res_losses = check_image_upsample(high_res_data_path, sidelen_highres, img_siren, output_vid_path_high_res, plot_output_path_high_res)
     
     interpulation(image_dataset, img_siren, images_pairs_names, train_data_path, sidelen= sidelen, out_interp_vid_path = output_vid_path_interpulation, out_interp_img_path = output_image_path_interpulation)
     
+    final_train_loss = train_summery['losses_vector'][-1].mean()
+    high_res_loss = high_res_losses.mean()
+    exp_summery = {'train_loss': final_train_loss, 'high_res_loss': high_res_loss}
+    return exp_summery
 
 
 
