@@ -65,44 +65,15 @@ def train(img_siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
     return {'losses_vector': losses_agragated}
 
 
-# def vid_creator(images):
+def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names, train_config):
 
-#     image_files = sorted(os.listdir(image_dir))
-
-#     # Define the output video file name
-#     output_video = "output_video.avi"
-
-#     # Get the first image to extract dimensions
-#     first_image = cv2.imread(os.path.join(image_dir, image_files[0]))
-#     height, width, _ = first_image.shape
-
-#     # Define the video codec and create VideoWriter object
-#     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-#     out = cv2.VideoWriter(output_video, fourcc, 10.0, (width, height))
-
-#     # Loop through each image and add it to the video
-#     for image_file in image_files:
-#         image_path = os.path.join(image_dir, image_file)
-#         frame = cv2.imread(image_path)
-#         out.write(frame)
-
-#     # Release the VideoWriter and close all OpenCV windows
-#     out.release()
-#     cv2.destroyAllWindows()
-
-def run_exp(train_data_path, high_res_data_path, output_path, train_config):
-    # configuration 
-    # main_dir = Path('/home/yam/workspace/data/cognetive/data/')
-    # output_path = input_path / 'results'
     output_path.mkdir(exist_ok=True)
-    # train_data_path = input_path / '48_test'
-    # high_res_train_data_path = input_path/ '256_test'
     output_vid_path = output_path / 'gt_vs_pred.mp4'
     output_vid_path_high_res =  output_path / 'gt_vs_pred_high_res.mp4'
     output_vid_path_interpulation =  output_path / 'interpulation.mp4'
     output_image_path_interpulation =  output_path / 'interpulation.png'
     convergene_graph =  output_path / 'generalization.png'
-    images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
+    
     plot_output_path = output_path / 'plot.png'
     plot_output_path_high_res = output_path / 'plot_high_res.png'
 
@@ -110,8 +81,6 @@ def run_exp(train_data_path, high_res_data_path, output_path, train_config):
     hidden_layers = train_config.net_params['hidden_layers']
     omega_0 = train_config.net_params['omega_0']
     outermost = train_config.net_params['outermost']
-    # net_architecture = {'hidden_features': hidden_features, 'hidden_layers': hidden_layers, 'omega_0': omega_0, 'outermost': 'linear'}
-    # train_config = TrainConfig(total_steps = 1000, steps_til_summary=10, lr = 1e-4, net_params=net_architecture)
     hidden_features = train_config.net_params['hidden_features']
     sidelen = 48
     sidelen_highres = 256
@@ -127,10 +96,14 @@ def run_exp(train_data_path, high_res_data_path, output_path, train_config):
     train_summery = train(img_siren, dataloader, train_config)
     # show resoults 
     images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader, img_siren, sidelen)
-    ax  = plt.subplot(111)
-    ax.plot(images_tensor[0][:, 24, 0].detach().cpu())
-    ax.plot(images_tensor[0][:, 24+48, 0].detach().cpu())
+    fig, ax  = plt.subplots(figsize=(6,6))
+    ax.plot(images_tensor[0][:, 24, 0].detach().cpu(), label='pred')
+    ax.plot(images_tensor[0][:, 24+48, 0].detach().cpu(), label='gt')
+    ax.legend()
     plt.title('raw 24 in some image, the red channel')
+    ax.set_ylabel('red channel intensity')
+    ax.set_xlabel('pixel x coord')
+    
     plt.savefig(str(plot_output_path))
     plt.close("all")
 
@@ -143,25 +116,27 @@ def run_exp(train_data_path, high_res_data_path, output_path, train_config):
     final_train_loss = train_summery['losses_vector'][-1].mean()
     high_res_loss = high_res_losses.mean()
     exp_summery = {'train_loss': final_train_loss, 'high_res_loss': high_res_loss}
+    torch.save(img_siren,output_path/ 'siren_model.pth')
     return exp_summery
 
 
 
 if __name__ == '__main__':
     data_dir = Path('/home/yam/workspace/data/cognetive/data/')
-    train_data_path = data_dir / '48_test'
-    high_res_data_path = data_dir/ '256_test'
+    train_data_path = data_dir / '48'
+    high_res_data_path = data_dir/ '256'
     output_path = data_dir / 'results'
+    images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
 
-    hidden_features = 256
-    hidden_layers = 2
+    hidden_features = 512
+    hidden_layers = 4
     omega_0 = 30
     outermost = 'linear'
-    total_steps = 60
+    total_steps = 1000
     steps_til_summary=10
     lr = 1e-4
 
     net_architecture = {'hidden_features': hidden_features, 'hidden_layers': hidden_layers, 'omega_0': omega_0, 'outermost': outermost}
     train_config = TrainConfig(total_steps = total_steps, steps_til_summary=steps_til_summary, lr = lr, net_params=net_architecture)
-    run_exp(train_data_path, high_res_data_path, output_path, train_config)
+    run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names, train_config)
     print('done!')

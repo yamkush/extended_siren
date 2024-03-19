@@ -105,13 +105,17 @@ def check_image_upsample(images_dir:str, sidelen:int, img_siren, output_path, pl
             model_input = model_input.cuda()
             model_output, coords = img_siren(model_input)
             if first_image_flag:
-                pred_im = model_output[0].view(sidelen, sidelen, 3)
-                gt_im = ground_truth[0].view(sidelen,sidelen, 3)
+                pred_im = model_output[0].view(sidelen, sidelen, 3).mul(255).clip(0,255)
+                gt_im = ground_truth[0].view(sidelen,sidelen, 3).mul(255).clip(0,255)
                 ax  = plt.subplot(111)
                 ax.plot(pred_im[:, 128, 0].detach().cpu(), label='pred')
                 ax.plot(gt_im[:, 128, 0].detach().cpu(), label= 'gt')
+                ax.legend()
+                ax.set_ylabel('red channel intensity')
+                ax.set_xlabel('pixel x coord')
                 plt.title('raw 128 in some image, the red channel')
                 plt.savefig(str(plot_output_path))
+                
                 plt.close("all")
                 first_image_flag = False
 

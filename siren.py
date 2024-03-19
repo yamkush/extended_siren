@@ -30,9 +30,9 @@ def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
     return mgrid
 
 def get_zifran_mgrid(sidelen, dim=2, num_of_images=2):
-    R = 1
+    R = 0.1
     mgrid = get_mgrid(sidelen, dim, num_of_images)
-    mgrid2 = - torch.tensor([1, 1]) - mgrid
+    mgrid2 =  - mgrid
     mgrid3 = torch.stack((mgrid.norm(dim=1), torch.atan2(mgrid[:,0], mgrid[:,1])),dim=1)
     mgrid_z = get_extanded_mgrid(sidelen, dim, num_of_images)[:, -1][:,None]
     mgrid4 = R * torch.sin(mgrid_z*np.pi)
