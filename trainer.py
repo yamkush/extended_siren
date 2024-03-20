@@ -8,11 +8,8 @@ from pathlib import Path
 from PIL import Image
 from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 import numpy as np
-import skimage
 import matplotlib.pyplot as plt
 import glob
-
-import time
 
 from utils import vid_creator_compere_gt_to_pard, transrom_gt_and_pred_to_a_set_of_contatenated_images, interpulation, check_image_upsample, visualize_network_convergence
 from siren import *
@@ -78,7 +75,9 @@ def train(img_siren:Siren, dataloader:DataLoader,hight_res_dataloader:DataLoader
 
 
 def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names, train_config):
-
+    train_data_path = Path(train_data_path)
+    high_res_data_path = Path(high_res_data_path)
+    output_path = Path(output_path)
     output_path.mkdir(exist_ok=True, parents=True)
     output_vid_path = output_path / 'gt_vs_pred.mp4'
     output_vid_path_high_res =  output_path / 'gt_vs_pred_high_res.mp4'
@@ -131,18 +130,19 @@ def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names,
 
 if __name__ == '__main__':
     # input and output pathes
-    data_dir = Path('/home/yam/workspace/data/cognetive/data/')
-    train_data_path = data_dir / '48'
-    high_res_data_path = data_dir/ '256'
-    output_path = data_dir / 'results'
+    train_data_path = '/home/yam/workspace/data/cognetive/data/48'
+    high_res_data_path = '/home/yam/workspace/data/cognetive/data/256'
+    output_path = '/home/yam/workspace/data/cognetive/data/results'
+
+    # pairs for interpolation
     images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
 
     # nn configuration 
-    hidden_features = 1024
-    hidden_layers = 3
+    hidden_features = 512
+    hidden_layers = 4
     omega_0 = 30
     outermost = 'linear'
-    total_steps = 2000
+    total_steps = 1000
     steps_til_summary=25
     lr = 1e-4
 
