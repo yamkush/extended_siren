@@ -28,7 +28,7 @@ Trainer artifacts -
 7. plot_high_res - a plot of a row from the first images red channel at line 124 for ground trouth and prediction from the test data
 8. siren_model.pth - saved learned Siren model
 
-In `trainer.py`, in the `__main__` function, you can adjust the NN architecture and trainer parameters. Their defaults are:
+In `trainer.py`, in `__main__`, you can adjust the NN architecture and trainer parameters. Their defaults are:
 ```
 hidden_features = 512
 hidden_layers = 4
