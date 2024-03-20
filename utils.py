@@ -3,9 +3,11 @@ import numpy as np
 import os
 import glob
 import matplotlib.pyplot as plt
-from pathlib import Path
 import torch
+
+from pathlib import Path
 from torch.utils.data import DataLoader, Dataset
+
 from siren import ImageFitting
 
 def vid_creator_compere_gt_to_pard(images, output_video):
@@ -47,7 +49,6 @@ def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,
 
     return torch.stack(images_list)
         
-
 def interpulation(dataset, img_siren, images_pairs_names, images_dir, out_interp_vid_path, out_interp_img_path):
     images_path_list = sorted(glob.glob(str(Path(images_dir)/ '*.png')))
     sidelen = dataset.sidelen
@@ -89,8 +90,6 @@ def interpulation(dataset, img_siren, images_pairs_names, images_dir, out_interp
         images_matrix = torch.cat(horez_concat_images_list, dim=0)
         cv2.imwrite(str(out_interp_img_path), images_matrix.cpu().numpy() )
          
-
-
 def check_image_upsample(images_dir:str, img_siren, output_path, plot_output_path):
 
     # data loading and traning

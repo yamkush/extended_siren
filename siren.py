@@ -193,15 +193,6 @@ def get_image_tensor(image_path):
     img_tensor[mask, :] = 1
     img_tensor = img_tensor.permute(2,0,1)
     img_out = Normalize(torch.Tensor([0.5]), torch.Tensor([0.5]))(img_tensor)
-
-    # transform = Compose([
-    #     ToTensor(),
-    #     Normalize(torch.Tensor([0.5]), torch.Tensor([0.5]))
-    # ])
-    # img = transform(img)
-    # img2 = img
-    # img2[:,img2[3] == 0] = [0,0,0]
-    # img2 = img2[:3]
     return img_out[:3]
 
 

@@ -130,12 +130,14 @@ def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names,
 
 
 if __name__ == '__main__':
+    # input and output pathes
     data_dir = Path('/home/yam/workspace/data/cognetive/data/')
     train_data_path = data_dir / '48'
     high_res_data_path = data_dir/ '256'
     output_path = data_dir / 'results'
     images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
 
+    # nn configuration 
     hidden_features = 1024
     hidden_layers = 3
     omega_0 = 30
@@ -144,6 +146,7 @@ if __name__ == '__main__':
     steps_til_summary=25
     lr = 1e-4
 
+    # experiment 
     net_architecture = {'hidden_features': hidden_features, 'hidden_layers': hidden_layers, 'omega_0': omega_0, 'outermost': outermost}
     train_config = TrainConfig(total_steps = total_steps, steps_til_summary=steps_til_summary, lr = lr, net_params=net_architecture)
     run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names, train_config)
