@@ -19,9 +19,9 @@ image embeding.pdf
 ```
 
 Trainer artifacts - 
-1. generalization.png - output graph of the MSE of the test and train data
-2. gt_vs_pred.mp4  - video of all estimated images and the train data
-3. gt_vs_pred_high_res.mp4 - video of all estimated images w.r.t the test data
+1. generalization.png - output graph of the MSE of the test vs train data
+2. gt_vs_pred.mp4  - video of all estimated images vs train data
+3. gt_vs_pred_high_res.mp4 - video of all estimated images vs test data
 4. interpolation.mp4 - interpolation video between two images
 5. interpolation.png - interpolation images of all 3 pairs
 6. plot.png - a plot of a row from the first images red channel at line 24 for ground trouth and prediction
@@ -30,6 +30,7 @@ Trainer artifacts -
 
 In `trainer.py`, in `__main__`, you can adjust the NN architecture and trainer parameters. Their defaults are:
 ```
+images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
 hidden_features = 512
 hidden_layers = 4
 omega_0 = 30
