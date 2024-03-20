@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import os
 from pathlib import Path
+import argparse
 
 from PIL import Image
 from torchvision.transforms import Resize, Compose, ToTensor, Normalize
@@ -127,13 +128,33 @@ def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names,
     return train_summery
 
 
+def parse_args():
+    import argparse
+
+    # Create the parser
+    parser = argparse.ArgumentParser(description="Description of your script")
+
+    # Add named arguments
+    parser.add_argument("--train_data",default='', help="path to train data")
+    parser.add_argument("--high_res_data",default='', help="path to test data")
+    parser.add_argument("--output",default='', help="path to experiments artifacts")
+    
+    # Parse the command-line arguments
+    args = parser.parse_args()
+    return args
 
 if __name__ == '__main__':
     # input and output pathes
-    train_data_path = '/home/yam/workspace/data/cognetive/data/48'
+    train_data_path = '/home/yam/workspace/data/cognetive/data/48_test_2'
     high_res_data_path = '/home/yam/workspace/data/cognetive/data/256'
     output_path = '/home/yam/workspace/data/cognetive/data/results'
 
+    args = parse_args()
+    train_data_path = args.train_data if args.train_data else train_data_path
+    high_res_data_path = args.high_res_data if args.high_res_data else high_res_data_path
+    output_path = args.output if args.output else output_path
+
+     
     # pairs for interpolation
     images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
 
