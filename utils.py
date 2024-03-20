@@ -8,9 +8,17 @@ import torch
 from pathlib import Path
 from torch.utils.data import DataLoader, Dataset
 
-from siren import ImageFitting
+from siren import ImageFitting, Siren
 
-def vid_creator_compere_gt_to_pard(images, output_video):
+
+class TrainConfig:
+    def __init__(self, total_steps:int, steps_til_summary:int , lr:float, net_params: dict):
+        self.total_steps = total_steps
+        self.steps_til_summary = steps_til_summary
+        self.lr = lr
+        self.net_params = net_params
+
+def vid_creator_compere_gt_to_pard(images:list, output_video:Path):
     
     
     # Get the first image to extract dimensions
@@ -30,7 +38,7 @@ def vid_creator_compere_gt_to_pard(images, output_video):
     out.release()
     cv2.destroyAllWindows()
 
-def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,img_siren):
+def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,img_siren:Siren):
     sidelen = dataloader.dataset.sidelen
     with torch.no_grad():
         images_list = []
@@ -49,7 +57,7 @@ def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,
 
     return torch.stack(images_list)
         
-def interpulation(dataset, img_siren, images_pairs_names, images_dir, out_interp_vid_path, out_interp_img_path):
+def interpulation(dataset:ImageFitting, img_siren:Siren, images_pairs_names:list, images_dir:Path, out_interp_vid_path:Path, out_interp_img_path:Path):
     images_path_list = sorted(glob.glob(str(Path(images_dir)/ '*.png')))
     sidelen = dataset.sidelen
     images_names = [Path(im_path).stem for im_path in images_path_list]
@@ -90,7 +98,7 @@ def interpulation(dataset, img_siren, images_pairs_names, images_dir, out_interp
         images_matrix = torch.cat(horez_concat_images_list, dim=0)
         cv2.imwrite(str(out_interp_img_path), images_matrix.cpu().numpy() )
          
-def check_image_upsample(images_dir:str, img_siren, output_path, plot_output_path):
+def check_image_upsample(images_dir:str, img_siren:Siren, output_path:Path, plot_output_path:Path):
 
     # data loading and traning
     image_dataset = ImageFitting( images_dir)
@@ -124,7 +132,7 @@ def check_image_upsample(images_dir:str, img_siren, output_path, plot_output_pat
             losses.append(((model_output - ground_truth.cuda())[0]**2).mean(dim=1).mean())
     return torch.stack(losses)
 
-def visualize_network_convergence(train_summery:dict, output_path: Path, train_config):
+def visualize_network_convergence(train_summery:dict, output_path: Path, train_config:TrainConfig):
 
     train_loss = train_summery['loss']['train_loss'].detach().cpu()
     test_loss = train_summery['loss']['test_loss'].detach().cpu()

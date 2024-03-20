@@ -12,16 +12,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob
 
-from utils import vid_creator_compere_gt_to_pard, transrom_gt_and_pred_to_a_set_of_contatenated_images, interpulation, check_image_upsample, visualize_network_convergence
+from utils import *
 from siren import *
 
 
-class TrainConfig:
-    def __init__(self, total_steps:int, steps_til_summary:int , lr:float, net_params: dict):
-        self.total_steps = total_steps
-        self.steps_til_summary = steps_til_summary
-        self.lr = lr
-        self.net_params = net_params
 
 def loss_per_image(sidelen: int, num_of_images: int, pred: torch.Tensor, gt:torch.Tensor) -> list:
     pixels_in_image = sidelen**2
@@ -75,7 +69,7 @@ def train(img_siren:Siren, dataloader:DataLoader,hight_res_dataloader:DataLoader
     return {'loss': losses_agragated}
 
 
-def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names, train_config):
+def run_exp(train_data_path:str, high_res_data_path:str, output_path:str, images_pairs_names:list, train_config:TrainConfig):
     train_data_path = Path(train_data_path)
     high_res_data_path = Path(high_res_data_path)
     output_path = Path(output_path)

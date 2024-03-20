@@ -11,6 +11,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob
 
+
+
 def get_mgrid(sidelen, dim=2, num_of_images=1):
     '''Generates a flattened grid of (x,y,...) coordinates in a range of -1 to 1.
     sidelen: int
