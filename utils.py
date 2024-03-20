@@ -28,7 +28,8 @@ def vid_creator_compere_gt_to_pard(images, output_video):
     out.release()
     cv2.destroyAllWindows()
 
-def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,img_siren, sidelen):
+def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,img_siren):
+    sidelen = dataloader.dataset.sidelen
     with torch.no_grad():
         images_list = []
         num_of_pixels = sidelen**2
@@ -47,8 +48,9 @@ def transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader: DataLoader,
     return torch.stack(images_list)
         
 
-def interpulation(dataset, img_siren, images_pairs_names, images_dir, sidelen, out_interp_vid_path, out_interp_img_path):
+def interpulation(dataset, img_siren, images_pairs_names, images_dir, out_interp_vid_path, out_interp_img_path):
     images_path_list = sorted(glob.glob(str(Path(images_dir)/ '*.png')))
+    sidelen = dataset.sidelen
     images_names = [Path(im_path).stem for im_path in images_path_list]
     images_list = []
     for pair_names in images_pairs_names:
@@ -89,14 +91,15 @@ def interpulation(dataset, img_siren, images_pairs_names, images_dir, sidelen, o
          
 
 
-def check_image_upsample(images_dir:str, sidelen:int, img_siren, output_path, plot_output_path):
+def check_image_upsample(images_dir:str, img_siren, output_path, plot_output_path):
 
     # data loading and traning
-    image_dataset = ImageFitting(sidelen, images_dir)
+    image_dataset = ImageFitting( images_dir)
+    sidelen = image_dataset.sidelen
     image_dataset.pixels = image_dataset.pixels.cpu()
     image_dataset.coords = image_dataset.coords.cpu()
     dataloader = DataLoader(image_dataset, pin_memory=True, batch_size=1, num_workers=0)
-    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader, img_siren, sidelen)
+    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader, img_siren)
     vid_creator_compere_gt_to_pard(images_tensor, output_path)
     losses = []
     first_image_flag = True
@@ -124,11 +127,12 @@ def check_image_upsample(images_dir:str, sidelen:int, img_siren, output_path, pl
 
 def visualize_network_convergence(train_summery:dict, output_path: Path, train_config):
 
-    losses_agragated = torch.stack(train_summery['losses_vector'])
-    x_axis = np.arange(losses_agragated.shape[0])*train_config.steps_til_summary
+    train_loss = train_summery['loss']['train_loss'].detach().cpu()
+    test_loss = train_summery['loss']['test_loss'].detach().cpu()
+    x_axis = np.arange(train_loss.shape[0])*train_config.steps_til_summary
     fig, ax =plt.subplots(figsize=(6, 6))
-    ax.plot(x_axis, torch.log(losses_agragated.mean(dim=1)), label='mean')
-    ax.plot(x_axis, torch.log(losses_agragated.max(dim=1)[0]), label='min')
+    ax.plot(x_axis, torch.log(train_loss), label='train')
+    ax.plot(x_axis, torch.log(test_loss), label='test')
     ax.legend()
     plt.title('images generalization')
     plt.xlabel('iteration')

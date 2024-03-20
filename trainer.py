@@ -33,7 +33,7 @@ def loss_per_image(sidelen: int, num_of_images: int, pred: torch.Tensor, gt:torc
     return losses
 
 
-def train(img_siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
+def train(img_siren:Siren, dataloader:DataLoader,hight_res_dataloader:DataLoader, config:TrainConfig)->dict:
 
 
     total_steps = config.total_steps # Since the whole image is our dataset, this just means 500 gradient descent steps.
@@ -42,12 +42,13 @@ def train(img_siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
 
     optim = torch.optim.Adam(lr=1e-4, params=img_siren.parameters())
 
-    losses_agragated = []
+    losses_agragated = {'train_loss':[], 'test_loss': []}
 
     for step in range(total_steps):
         loss_no_grad = torch.scalar_tensor(0.).cuda()
         losses_per_image = []
-        for model_input, ground_truth in dataloader:
+        high_res_loss_no_grad = torch.scalar_tensor(0.).cuda()
+        for (model_input, ground_truth), (high_res_model_input, high_res_ground_truth) in zip(dataloader, hight_res_dataloader):
             model_input = model_input.cuda()
             ground_truth = ground_truth.cuda()
             model_output, coords = img_siren(model_input)
@@ -55,14 +56,25 @@ def train(img_siren:Siren, dataloader:DataLoader, config:TrainConfig)->dict:
             with torch.no_grad():
                 loss_no_grad += loss
                 losses_per_image.append(loss)
+                if not step % steps_til_summary:
+                    high_res_model_input =  high_res_model_input.cuda()
+                    high_res_ground_truth = high_res_ground_truth.cuda()
+                    high_res_model_output, high_res_coords = img_siren(high_res_model_input)
+                    high_res_loss = ((high_res_model_output - high_res_ground_truth)**2).mean()
+                    high_res_loss_no_grad += high_res_loss
+                    
             loss.backward()
         optim.step()
         optim.zero_grad()
         if not step % steps_til_summary:
             print("Step %d, Total loss %0.6f" % (step, loss_no_grad))
             losses_per_image = torch.tensor(losses_per_image)
-            losses_agragated.append(losses_per_image)
-    return {'losses_vector': losses_agragated}
+            losses_agragated['train_loss'].append(loss_no_grad)
+            losses_agragated['test_loss'].append(high_res_loss_no_grad)
+
+    losses_agragated['train_loss'] = torch.stack(losses_agragated['train_loss'])
+    losses_agragated['test_loss'] = torch.stack(losses_agragated['test_loss'])
+    return {'loss': losses_agragated}
 
 
 def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names, train_config):
@@ -82,20 +94,19 @@ def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names,
     omega_0 = train_config.net_params['omega_0']
     outermost = train_config.net_params['outermost']
     hidden_features = train_config.net_params['hidden_features']
-    sidelen = 48
-    sidelen_highres = 256
-
+    
     # data loading and traning
-    image_dataset = ImageFitting(48, train_data_path)
+    image_dataset = ImageFitting(train_data_path)
+    high_res_dataset = ImageFitting(high_res_data_path)
     dataloader = DataLoader(image_dataset, batch_size=1, pin_memory=False, num_workers=0)
+    high_res_dataloader = DataLoader(high_res_dataset)
     img_siren = Siren(in_features=image_dataset.coords.shape[-1], out_features=image_dataset.pixels.shape[-1], hidden_features=hidden_features,
                     hidden_layers=hidden_layers, outermost=outermost)
     img_siren.cuda()
-    # train_summery['upsample_losses'] = check_image_upsample(high_res_images_dir, sidelen_highres, img_siren)
-
-    train_summery = train(img_siren, dataloader, train_config)
+    
+    train_summery = train(img_siren, dataloader, high_res_dataloader, train_config)
     # show resoults 
-    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader, img_siren, sidelen)
+    images_tensor = transrom_gt_and_pred_to_a_set_of_contatenated_images(dataloader, img_siren)
     fig, ax  = plt.subplots(figsize=(6,6))
     ax.plot(images_tensor[0][:, 24, 0].detach().cpu(), label='pred')
     ax.plot(images_tensor[0][:, 24+48, 0].detach().cpu(), label='gt')
@@ -109,22 +120,19 @@ def run_exp(train_data_path, high_res_data_path, output_path,images_pairs_names,
 
     vid_creator_compere_gt_to_pard(images_tensor, output_vid_path)
     visualize_network_convergence(train_summery, convergene_graph, train_config)
-    high_res_losses = check_image_upsample(high_res_data_path, sidelen_highres, img_siren, output_vid_path_high_res, plot_output_path_high_res)
+    high_res_losses = check_image_upsample(high_res_data_path, img_siren, output_vid_path_high_res, plot_output_path_high_res)
     
-    interpulation(image_dataset, img_siren, images_pairs_names, train_data_path, sidelen= sidelen, out_interp_vid_path = output_vid_path_interpulation, out_interp_img_path = output_image_path_interpulation)
-    
-    final_train_loss = train_summery['losses_vector'][-1].mean()
-    high_res_loss = high_res_losses.mean()
-    exp_summery = {'train_loss': final_train_loss, 'high_res_loss': high_res_loss}
+    interpulation(image_dataset, img_siren, images_pairs_names, train_data_path, out_interp_vid_path = output_vid_path_interpulation, out_interp_img_path = output_image_path_interpulation)
+     
     torch.save(img_siren,output_path/ 'siren_model.pth')
-    return exp_summery
+    return train_summery
 
 
 
 if __name__ == '__main__':
     data_dir = Path('/home/yam/workspace/data/cognetive/data/')
-    train_data_path = data_dir / '48'
-    high_res_data_path = data_dir/ '256'
+    train_data_path = data_dir / '48_test_bigger'
+    high_res_data_path = data_dir/ '256_test_bigger'
     output_path = data_dir / 'results'
     images_pairs_names = [['buy', 'return_purchase'], ['price_tag_euro', 'price_tag_usd'], ['return_purchase','shopping_cart']]
 
@@ -132,8 +140,8 @@ if __name__ == '__main__':
     hidden_layers = 4
     omega_0 = 30
     outermost = 'linear'
-    total_steps = 1000
-    steps_til_summary=10
+    total_steps = 100
+    steps_til_summary=20
     lr = 1e-4
 
     net_architecture = {'hidden_features': hidden_features, 'hidden_layers': hidden_layers, 'omega_0': omega_0, 'outermost': outermost}

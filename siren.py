@@ -30,7 +30,7 @@ def get_extanded_mgrid(sidelen, dim=2, num_of_images=2):
     return mgrid
 
 def get_zifran_mgrid(sidelen, dim=2, num_of_images=2):
-    R = 0.1
+    R = 1
     mgrid = get_mgrid(sidelen, dim, num_of_images)
     mgrid2 =  - mgrid
     mgrid3 = torch.stack((mgrid.norm(dim=1), torch.atan2(mgrid[:,0], mgrid[:,1])),dim=1)
@@ -206,17 +206,18 @@ def get_image_tensor(image_path):
 
 
 class ImageFitting(Dataset):
-    def __init__(self, sidelength, images_dir:str):
+    def __init__(self, images_dir:str):
         super().__init__()
         images_path_list = sorted(glob.glob(str(Path(images_dir)/ '*.png')))
+        self.sidelen = ToTensor()(Image.open(images_path_list[0])).shape[-1]
         self.num_of_images = len(images_path_list)
         pixels_list = []
         for image_path in images_path_list:
             img_i = get_image_tensor(image_path)
             pixels_i = img_i.permute(1, 2, 0).view(-1, 3)
             pixels_list.append(pixels_i)
-        self.pixels = torch.stack(pixels_list)
-        self.coords = get_zifran_mgrid(sidelength, 2, self.num_of_images)
+        self.pixels = torch.stack(pixels_list) 
+        self.coords = get_zifran_mgrid(self.sidelen, 2, self.num_of_images)
 
     def __len__(self):
         return self.coords.shape[0]
