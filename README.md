@@ -1,5 +1,6 @@
 # extended_siren
-
+## exercise summary
+image embeding.pdf
 ## Installation
 1. Install the following packages using pip:
   pip install numpy matplotlib torch opencv-python Pillow torchvision scikit-image
@@ -37,5 +38,4 @@ total_steps = 1000
 steps_til_summary=25
 lr = 1e-4
 ```
-
 
